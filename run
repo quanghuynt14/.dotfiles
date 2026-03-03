@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Colors
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly RESET='\033[0m'
+readonly BOLD='\033[1m'
+
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly DOTFILES_DIR
+
+# Helpers
+
+print_header() {
+    echo -e "\n${BOLD}${BLUE}==>${RESET} ${BOLD}$1${RESET}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓${RESET} $1"
+}
+
+print_error() {
+    echo -e "${RED}✗${RESET} $1" >&2
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠${RESET} $1"
+}
+
+print_info() {
+    echo -e "${CYAN}ℹ${RESET} $1"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Backup conflicting files then stow
+
+stow_dotfiles() {
+    local home_dir="${DOTFILES_DIR}/home"
+    local backup_dir="${DOTFILES_DIR}/backups/$(date +%Y%m%d_%H%M%S)"
+    local has_conflicts=false
+
+    # Find files that would conflict with stow
+    while IFS= read -r -d '' file; do
+        local relative="${file#"${home_dir}"/}"
+        local target="${HOME}/${relative}"
+
+        if [[ -e "$target" && ! -L "$target" ]]; then
+            has_conflicts=true
+            mkdir -p "$(dirname "${backup_dir}/${relative}")"
+            cp -p "$target" "${backup_dir}/${relative}"
+            rm "$target"
+        fi
+    done < <(find "$home_dir" -type f -print0)
+
+    if [[ "$has_conflicts" == true ]]; then
+        print_info "Backed up conflicting files to ${backup_dir}"
+    fi
+
+    if stow -R -d "${DOTFILES_DIR}" -t "${HOME}" home; then
+        print_success "Dotfiles stowed successfully"
+    else
+        print_error "Failed to stow dotfiles"
+        return 1
+    fi
+}
+
+# Commands
+
+cmd_init() {
+    print_header "Initializing dotfiles"
+
+    # 1. Homebrew
+    if command_exists brew; then
+        print_success "Homebrew is already installed"
+    else
+        print_info "Installing Homebrew..."
+        if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+            print_success "Homebrew installed"
+        else
+            print_error "Failed to install Homebrew"
+            return 1
+        fi
+    fi
+
+    # 2. Packages
+    print_info "Installing packages from Brewfile..."
+    if brew bundle --file="${DOTFILES_DIR}/Brewfile"; then
+        print_success "All packages installed"
+    else
+        print_warning "Some packages failed to install"
+    fi
+
+    # 3. Stow
+    print_info "Stowing dotfiles..."
+    stow_dotfiles
+
+    # 4. Fish as default shell
+    local fish_path
+    fish_path="$(command -v fish)"
+
+    if ! grep -q "$fish_path" /etc/shells 2>/dev/null; then
+        print_info "Adding Fish to /etc/shells (requires sudo)..."
+        echo "$fish_path" | sudo tee -a /etc/shells >/dev/null
+    fi
+
+    if [[ "$SHELL" != "$fish_path" ]]; then
+        print_info "Setting Fish as default shell..."
+        if chsh -s "$fish_path"; then
+            print_success "Default shell changed to Fish"
+        else
+            print_error "Failed to change default shell"
+        fi
+    else
+        print_success "Fish is already the default shell"
+    fi
+
+    print_header "Done! Open a new terminal to see your new prompt."
+}
+
+cmd_stow() {
+    print_header "Stowing dotfiles"
+    stow_dotfiles
+}
+
+cmd_update() {
+    print_header "Updating dotfiles"
+
+    print_info "Pulling latest changes..."
+    if git -C "$DOTFILES_DIR" pull; then
+        print_success "Repository updated"
+    else
+        print_error "Failed to pull"
+        return 1
+    fi
+
+    stow_dotfiles
+}
+
+cmd_doctor() {
+    print_header "Running diagnostics"
+
+    local issues=0
+
+    # Homebrew
+    if command_exists brew; then
+        print_success "Homebrew installed"
+    else
+        print_error "Homebrew not installed"
+        ((++issues))
+    fi
+
+    # Check Brewfile packages
+    if command_exists brew && [[ -f "${DOTFILES_DIR}/Brewfile" ]]; then
+        if brew bundle check --file="${DOTFILES_DIR}/Brewfile" >/dev/null 2>&1; then
+            print_success "All Brewfile packages installed"
+        else
+            print_warning "Some Brewfile packages are missing"
+            brew bundle check --file="${DOTFILES_DIR}/Brewfile" 2>&1 | while IFS= read -r line; do
+                print_info "  $line"
+            done
+        fi
+    fi
+
+    # Stow
+    if command_exists stow; then
+        print_success "GNU Stow installed"
+    else
+        print_error "GNU Stow not installed"
+        ((++issues))
+    fi
+
+    # Fish
+    if command_exists fish; then
+        print_success "Fish shell installed"
+        if [[ "$SHELL" == "$(command -v fish)" ]]; then
+            print_success "Fish is default shell"
+        else
+            print_warning "Fish is not default shell (current: $SHELL)"
+        fi
+    else
+        print_error "Fish shell not installed"
+        ((++issues))
+    fi
+
+    # Starship
+    if command_exists starship; then
+        print_success "Starship prompt installed"
+    else
+        print_error "Starship not installed"
+        ((++issues))
+    fi
+
+    # Ghostty
+    if [[ -d "/Applications/Ghostty.app" ]]; then
+        print_success "Ghostty installed"
+    else
+        print_warning "Ghostty not found in /Applications"
+    fi
+
+    # Key symlinks
+    local expected_links=(
+        ".config/fish/config.fish"
+        ".config/ghostty/config"
+        ".config/git/config"
+        ".config/starship.toml"
+    )
+
+    local broken=0
+    for link in "${expected_links[@]}"; do
+        local target="${HOME}/${link}"
+        if [[ -L "$target" ]]; then
+            if [[ -e "$target" ]]; then
+                print_success "Symlink OK: ~/${link}"
+            else
+                print_error "Broken symlink: ~/${link}"
+                ((++broken))
+            fi
+        elif [[ -e "$target" ]] && [[ "$(realpath "$target")" == "${DOTFILES_DIR}"/* ]]; then
+            # File exists and resolves into dotfiles (via symlinked parent dir)
+            print_success "Managed by dotfiles: ~/${link}"
+        else
+            print_warning "Not managed by dotfiles: ~/${link}"
+            ((++broken))
+        fi
+    done
+
+    # Git config location
+    if [[ -f "${HOME}/.gitconfig" ]]; then
+        print_warning "~/.gitconfig exists (may override ~/.config/git/config)"
+    fi
+
+    echo ""
+    if [[ $issues -eq 0 && $broken -eq 0 ]]; then
+        print_success "All checks passed!"
+    else
+        print_warning "Found $issues critical issues, $broken symlink issues"
+    fi
+}
+
+cmd_help() {
+    cat << EOF
+${BOLD}Usage:${RESET} run <command>
+
+${BOLD}Commands:${RESET}
+    init      Full setup: Homebrew, packages, stow, Fish shell
+    stow      Backup conflicts and re-stow dotfiles
+    update    Pull latest changes and re-stow
+    doctor    Run diagnostics
+    help      Show this message
+EOF
+}
+
+# Main
+
+case "${1:-help}" in
+    init)   cmd_init ;;
+    stow)   cmd_stow ;;
+    update) cmd_update ;;
+    doctor) cmd_doctor ;;
+    help)   cmd_help ;;
+    *)
+        print_error "Unknown command: $1"
+        cmd_help
+        exit 1
+        ;;
+esac

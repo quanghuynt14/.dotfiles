@@ -1,0 +1,20 @@
+# https://git.github.io/htmldocs/git-config.html
+
+[user]
+	email = quanghuynt14@gmail.com
+	name = Huy
+	signingkey = 41974EFFE6DD2E42
+[push]
+	autoSetupRemote = true
+[gpg]
+	program = gpg
+[commit]
+	gpgsign = true
+[alias]
+	co = checkout
+	cob = checkout -b
+	cm = commit -m
+	rh1 = reset HEAD~1
+	sm = stash push -m
+	sl = stash list
+	sa = stash apply
