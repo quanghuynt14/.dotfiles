@@ -7,6 +7,12 @@ disabled = true
 [aws]
 disabled = true
 
+[dotnet]
+disabled = true
+
+[package]
+disabled = true
+
 [git_status]
 disabled = true
 
@@ -15,3 +21,6 @@ disabled = true
 
 [git_state]
 disabled = true
+
+[directory]
+truncate_to_repo = false
