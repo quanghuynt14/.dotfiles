@@ -247,16 +247,14 @@ cmd_doctor() {
 }
 
 cmd_help() {
-    cat << EOF
-${BOLD}Usage:${RESET} run <command>
-
-${BOLD}Commands:${RESET}
-    init      Full setup: Homebrew, packages, stow, Fish shell
-    stow      Backup conflicts and re-stow dotfiles
-    update    Pull latest changes and re-stow
-    doctor    Run diagnostics
-    help      Show this message
-EOF
+    echo -e "${BOLD}Usage:${RESET} run <command>"
+    echo ""
+    echo -e "${BOLD}Commands:${RESET}"
+    echo "    init      Full setup: Homebrew, packages, stow, Fish shell"
+    echo "    stow      Backup conflicts and re-stow dotfiles"
+    echo "    update    Pull latest changes and re-stow"
+    echo "    doctor    Run diagnostics"
+    echo "    help      Show this message"
 }
 
 # Main
