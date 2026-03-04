@@ -7,6 +7,11 @@ disabled = true
 [aws]
 disabled = true
 
+[docker_context]
+detect_files = ["Dockerfile"]
+detect_folders = []
+detect_extensions = []
+
 [dotnet]
 disabled = true
 
@@ -22,5 +27,3 @@ disabled = true
 [git_state]
 disabled = true
 
-[directory]
-truncate_to_repo = false
