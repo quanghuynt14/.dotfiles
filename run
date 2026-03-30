@@ -56,7 +56,9 @@ stow_dotfiles() {
             has_conflicts=true
             mkdir -p "$(dirname "${backup_dir}/${relative}")"
             cp -p "$target" "${backup_dir}/${relative}"
-            rm "$target"
+            # rm "$target"
+	    # Instead of rm "$target", just warn
+	    print_warning "Conflict detected: $target exists. Back it up manually."
         fi
     done < <(find "$home_dir" -type f -print0)
 
