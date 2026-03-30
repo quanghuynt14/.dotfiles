@@ -123,6 +123,19 @@ cmd_init() {
         print_success "Fish is already the default shell"
     fi
 
+    # 5. Fisher & plugins (Fish plugin manager)
+    print_info "Installing Fisher & updating Fish plugins..."
+    fish -c '
+    # Install Fisher if not installed
+    if not functions -q fisher
+        curl -sL https://git.io/fisher | source
+    end
+    
+    # Update plugins
+    fisher update
+    '
+    print_success "Fisher & Fish plugins updated"
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 
