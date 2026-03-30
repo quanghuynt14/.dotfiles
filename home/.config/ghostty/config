@@ -8,4 +8,4 @@ shell-integration = fish
 font-size = 14
 
 # Always show ghostty as the title
-title = ghostty 
+# title = ghostty 

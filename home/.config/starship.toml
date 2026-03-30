@@ -27,3 +27,7 @@ disabled = true
 [git_state]
 disabled = true
 
+[cmd_duration]
+show_notifications = true
+min_time_to_notify = 60_000
+
