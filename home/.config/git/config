@@ -1,17 +1,26 @@
+[alias]
+        co = checkout
+        cob = checkout -b
+        cm = commit -m
+        rh1 = reset HEAD~1
+        sm = stash push -m
+        sl = stash list
+	sa = stash apply
+
 [push]
 	autoSetupRemote = true
+
 [gpg]
 	format = "ssh"
+
 [commit]
 	gpgsign = true
-[alias]
-	co = checkout
-	cob = checkout -b
-	cm = commit -m
-	rh1 = reset HEAD~1
-	sm = stash push -m
-	sl = stash list
-	sa = stash apply
+
+[init]
+	defaultBranch = "main"
+
+[pull]
+	rebase = false
 
 [user]
         email = quanghuynt14@gmail.com
