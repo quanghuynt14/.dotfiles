@@ -101,6 +101,12 @@ cmd_init() {
         print_warning "Some packages failed to install"
     fi
 
+    # Unlink Homebrew's node so nvm.fish controls the Node version
+    if brew ls --versions node >/dev/null 2>&1; then
+        brew unlink node >/dev/null 2>&1
+        print_success "Unlinked Homebrew node (managed by nvm instead)"
+    fi
+
     # 3. Stow
     print_info "Stowing dotfiles..."
     stow_dotfiles
@@ -137,6 +143,19 @@ cmd_init() {
     fisher update
     '
     print_success "Fisher & Fish plugins updated"
+
+    # 6. Clean up universal variables that conflict with conf.d settings
+    fish -c 'set --erase --universal nvm_default_version 2>/dev/null'
+    fish -c 'set --erase --universal PATH 2>/dev/null'
+    print_success "Cleaned up universal Fish variables"
+
+    # 7. Remove stale system-level Node binaries (e.g. from old pkg installers)
+    for bin in node npm npx; do
+        if [ -f "/usr/local/bin/$bin" ]; then
+            sudo rm "/usr/local/bin/$bin"
+        fi
+    done
+    print_success "Removed stale system Node binaries (if any)"
 
     print_header "Done! Open a new terminal to see your new prompt."
 }
