@@ -1,8 +1,6 @@
-[username]
-disabled = true
-
 [hostname]
-disabled = true
+ssh_only = true
+ssh_symbol = "🌐"
 
 [aws]
 disabled = true
