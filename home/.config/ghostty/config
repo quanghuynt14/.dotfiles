@@ -1,2 +1,4 @@
 shell-integration = fish
 
+theme = Catppuccin Frappe
+
