@@ -40,6 +40,68 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Homebrew prefixes for the running platform, in preference order.
+# Apple Silicon prefers /opt/homebrew (native); Intel macs prefer /usr/local;
+# Linux uses linuxbrew. Other platforms get an empty list.
+brew_candidates() {
+    case "$(uname -s)" in
+        Darwin)
+            if [[ "$(uname -m)" == "arm64" ]]; then
+                printf '%s\n' /opt/homebrew/bin/brew /usr/local/bin/brew
+            else
+                printf '%s\n' /usr/local/bin/brew /opt/homebrew/bin/brew
+            fi
+            ;;
+        Linux)
+            printf '%s\n' /home/linuxbrew/.linuxbrew/bin/brew
+            ;;
+    esac
+}
+
+# Trust gate for `eval $(brew shellenv)`: only run binaries owned by root or
+# the current user. GNU stat (Linux) first, BSD stat (macOS) as fallback —
+# reversing the order would cause GNU stat -f to dump filesystem info to
+# stdout and contaminate the captured owner value.
+brew_owner_is_safe() {
+    local bin="$1" owner
+    owner="$(stat -c %u "$bin" 2>/dev/null || stat -f %u "$bin" 2>/dev/null)"
+    [[ -n "$owner" ]] || return 1
+    [[ "$owner" == "0" || "$owner" == "$(id -u)" ]]
+}
+
+# Accept a brew already on PATH only if it resolves into a known prefix —
+# guards against a shadowing binary or shell function getting eval'd.
+brew_on_path_is_trusted() {
+    local resolved
+    resolved="$(command -v brew 2>/dev/null)" || return 1
+    if command -v realpath >/dev/null 2>&1; then
+        resolved="$(realpath "$resolved" 2>/dev/null || echo "$resolved")"
+    fi
+    case "$resolved" in
+        /opt/homebrew/*|/home/linuxbrew/.linuxbrew/*|/usr/local/Homebrew/*|/usr/local/Cellar/*|/usr/local/bin/brew)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# Source brew shellenv so brew (and everything it installed) is on PATH.
+# Returns 0 only if a usable, trusted brew is on PATH afterwards.
+ensure_brew_on_path() {
+    if command_exists brew && brew_on_path_is_trusted; then
+        return 0
+    fi
+    local candidate
+    while IFS= read -r candidate; do
+        [[ -x "$candidate" ]] || continue
+        brew_owner_is_safe "$candidate" || continue
+        eval "$("$candidate" shellenv)"
+        command_exists brew && return 0
+        return 1
+    done < <(brew_candidates)
+    return 1
+}
+
 # Backup conflicting files then stow
 
 stow_dotfiles() {
@@ -90,18 +152,10 @@ cmd_init() {
     else
         print_info "Installing Homebrew..."
         if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
-            local brew_bin=""
-            for candidate in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew; do
-                if [[ -x "$candidate" ]]; then
-                    brew_bin="$candidate"
-                    break
-                fi
-            done
-            if [[ -z "$brew_bin" ]]; then
+            if ! ensure_brew_on_path; then
                 print_error "Homebrew installed but brew binary not found in known prefixes"
                 return 1
             fi
-            eval "$("$brew_bin" shellenv)"
             print_success "Homebrew installed"
         else
             print_error "Failed to install Homebrew"
@@ -198,13 +252,27 @@ cmd_update() {
 cmd_doctor() {
     print_header "Running diagnostics"
 
+    ensure_brew_on_path || true
+
     local issues=0
 
     # Homebrew
     if command_exists brew; then
         print_success "Homebrew installed"
     else
-        print_error "Homebrew not installed"
+        local found=""
+        while IFS= read -r candidate; do
+            if [[ -x "$candidate" ]]; then
+                found="$candidate"
+                break
+            fi
+        done < <(brew_candidates)
+        if [[ -n "$found" ]]; then
+            print_error "Homebrew at $found exists but cannot bootstrap PATH"
+            print_info "  Verify ownership (you or root) and that 'brew shellenv' produces valid output"
+        else
+            print_error "Homebrew not installed"
+        fi
         ((++issues))
     fi
 
