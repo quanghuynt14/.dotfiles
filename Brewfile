@@ -10,5 +10,7 @@ brew "tmux"
 brew "tree"
 brew "zoxide"
 
-# GUI apps
-cask "ghostty"
+# GUI apps (macOS only)
+if OS.mac?
+  cask "ghostty"
+end

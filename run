@@ -52,13 +52,18 @@ stow_dotfiles() {
         local relative="${file#"${home_dir}"/}"
         local target="${HOME}/${relative}"
 
+        # Skip if the target is reached via a stow-folded parent symlink
+        # (the leaf isn't a symlink, but it resolves into the dotfiles repo).
         if [[ -e "$target" && ! -L "$target" ]]; then
+            local resolved
+            resolved="$(realpath "$target" 2>/dev/null || readlink -f "$target" 2>/dev/null || echo "$target")"
+            if [[ "$resolved" == "${home_dir}"/* ]]; then
+                continue
+            fi
             has_conflicts=true
             mkdir -p "$(dirname "${backup_dir}/${relative}")"
             cp -p "$target" "${backup_dir}/${relative}"
-            # rm "$target"
-	    # Instead of rm "$target", just warn
-	    print_warning "Conflict detected: $target exists. Back it up manually."
+            print_warning "Conflict detected: $target exists. Back it up manually."
         fi
     done < <(find "$home_dir" -type f -print0)
 
@@ -85,7 +90,18 @@ cmd_init() {
     else
         print_info "Installing Homebrew..."
         if NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
-            eval "$(/opt/homebrew/bin/brew shellenv)"
+            local brew_bin=""
+            for candidate in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew; do
+                if [[ -x "$candidate" ]]; then
+                    brew_bin="$candidate"
+                    break
+                fi
+            done
+            if [[ -z "$brew_bin" ]]; then
+                print_error "Homebrew installed but brew binary not found in known prefixes"
+                return 1
+            fi
+            eval "$("$brew_bin" shellenv)"
             print_success "Homebrew installed"
         else
             print_error "Failed to install Homebrew"
@@ -234,10 +250,16 @@ cmd_doctor() {
     fi
 
     # Ghostty
-    if [[ -d "/Applications/Ghostty.app" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if [[ -d "/Applications/Ghostty.app" ]]; then
+            print_success "Ghostty installed"
+        else
+            print_warning "Ghostty not found in /Applications"
+        fi
+    elif command_exists ghostty; then
         print_success "Ghostty installed"
     else
-        print_warning "Ghostty not found in /Applications"
+        print_warning "Ghostty not found on PATH"
     fi
 
     # Key symlinks
