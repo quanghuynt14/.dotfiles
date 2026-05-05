@@ -317,17 +317,19 @@ cmd_doctor() {
         ((++issues))
     fi
 
-    # Ghostty
+    # Ghostty (terminal emulator — skip on headless Linux)
     if [[ "$(uname -s)" == "Darwin" ]]; then
         if [[ -d "/Applications/Ghostty.app" ]]; then
             print_success "Ghostty installed"
         else
             print_warning "Ghostty not found in /Applications"
         fi
-    elif command_exists ghostty; then
-        print_success "Ghostty installed"
-    else
-        print_warning "Ghostty not found on PATH"
+    elif [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+        if command_exists ghostty; then
+            print_success "Ghostty installed"
+        else
+            print_warning "Ghostty not found on PATH"
+        fi
     fi
 
     # Key symlinks
