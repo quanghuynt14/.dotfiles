@@ -13,6 +13,8 @@ readonly BOLD='\033[1m'
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly DOTFILES_DIR
+readonly GIT_EMAIL="quanghuynt14@gmail.com"
+readonly SSH_KEY_PATH="${HOME}/.ssh/id_ed25519"
 
 # Helpers
 
@@ -38,6 +40,49 @@ print_info() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+setup_ssh_key() {
+    if [[ -f "$SSH_KEY_PATH" && -f "${SSH_KEY_PATH}.pub" ]]; then
+        print_success "SSH key already exists at $SSH_KEY_PATH"
+    elif [[ -f "$SSH_KEY_PATH" ]]; then
+        print_info "Regenerating missing public key from existing private key..."
+        if ssh-keygen -y -f "$SSH_KEY_PATH" > "${SSH_KEY_PATH}.pub"; then
+            print_success "SSH public key regenerated"
+        else
+            print_error "Failed to regenerate SSH public key"
+            return 1
+        fi
+    else
+        print_info "Generating SSH key for Git/GitHub..."
+        mkdir -p "${HOME}/.ssh"
+        chmod 700 "${HOME}/.ssh"
+
+        if ssh-keygen -t ed25519 -C "$GIT_EMAIL" -f "$SSH_KEY_PATH" -N ""; then
+            print_success "SSH key generated"
+        else
+            print_error "Failed to generate SSH key"
+            return 1
+        fi
+    fi
+
+    chmod 600 "$SSH_KEY_PATH" 2>/dev/null || true
+    chmod 644 "${SSH_KEY_PATH}.pub" 2>/dev/null || true
+
+    if command_exists ssh-add; then
+        if ssh-add "$SSH_KEY_PATH" >/dev/null 2>&1; then
+            print_success "SSH key added to ssh-agent"
+        else
+            print_warning "Could not add SSH key to ssh-agent"
+        fi
+    fi
+
+    if command_exists pbcopy; then
+        pbcopy < "${SSH_KEY_PATH}.pub"
+        print_success "Public SSH key copied to clipboard"
+    fi
+
+    print_info "Add this public key to GitHub: Settings > SSH and GPG keys > New SSH key"
 }
 
 # Homebrew prefixes for the running platform, in preference order.
@@ -181,7 +226,10 @@ cmd_init() {
     print_info "Stowing dotfiles..."
     stow_dotfiles
 
-    # 4. Fish as default shell
+    # 4. SSH key for Git/GitHub and SSH commit signing
+    setup_ssh_key
+
+    # 5. Fish as default shell
     local fish_path
     fish_path="$(command -v fish)"
 
@@ -201,7 +249,7 @@ cmd_init() {
         print_success "Fish is already the default shell"
     fi
 
-    # 5. Fisher & plugins (Fish plugin manager)
+    # 6. Fisher & plugins (Fish plugin manager)
     print_info "Installing Fisher & updating Fish plugins..."
     fish -c '
     # Install Fisher if not installed
@@ -214,12 +262,12 @@ cmd_init() {
     '
     print_success "Fisher & Fish plugins updated"
 
-    # 6. Clean up universal variables that conflict with conf.d settings
+    # 7. Clean up universal variables that conflict with conf.d settings
     fish -c 'set --erase --universal nvm_default_version 2>/dev/null'
     fish -c 'set --erase --universal PATH 2>/dev/null'
     print_success "Cleaned up universal Fish variables"
 
-    # 7. Remove stale system-level Node binaries (e.g. from old pkg installers)
+    # 8. Remove stale system-level Node binaries (e.g. from old pkg installers)
     for bin in node npm npx; do
         if [ -f "/usr/local/bin/$bin" ]; then
             sudo rm "/usr/local/bin/$bin"
@@ -282,9 +330,11 @@ cmd_doctor() {
             print_success "All Brewfile packages installed"
         else
             print_warning "Some Brewfile packages are missing"
-            brew bundle check --file="${DOTFILES_DIR}/Brewfile" 2>&1 | while IFS= read -r line; do
+            local bundle_check_output
+            bundle_check_output="$(brew bundle check --file="${DOTFILES_DIR}/Brewfile" 2>&1 || true)"
+            while IFS= read -r line; do
                 print_info "  $line"
-            done
+            done <<< "$bundle_check_output"
         fi
     fi
 
@@ -364,6 +414,15 @@ cmd_doctor() {
         print_warning "~/.gitconfig exists (may override ~/.config/git/config)"
     fi
 
+    # SSH key used by Git signing config
+    if [[ -f "$SSH_KEY_PATH" && -f "${SSH_KEY_PATH}.pub" ]]; then
+        print_success "SSH signing key exists"
+    else
+        print_warning "SSH signing key missing at $SSH_KEY_PATH"
+        print_info "  Run './run init' to generate it"
+        ((++issues))
+    fi
+
     echo ""
     if [[ $issues -eq 0 && $broken -eq 0 ]]; then
         print_success "All checks passed!"
@@ -376,7 +435,7 @@ cmd_help() {
     echo -e "${BOLD}Usage:${RESET} run <command>"
     echo ""
     echo -e "${BOLD}Commands:${RESET}"
-    echo "    init      Full setup: Homebrew, packages, stow, Fish shell"
+    echo "    init      Full setup: Homebrew, packages, stow, SSH key, Fish shell"
     echo "    stow      Backup conflicts and re-stow dotfiles"
     echo "    update    Pull latest changes and re-stow"
     echo "    doctor    Run diagnostics"
