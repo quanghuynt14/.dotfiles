@@ -16,5 +16,4 @@ if OS.mac?
   cask "raycast"
   cask "slack"
   cask "visual-studio-code"
-  cask "claude-code"
 end

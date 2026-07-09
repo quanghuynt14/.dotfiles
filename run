@@ -292,6 +292,19 @@ cmd_init() {
         print_warning "Could not install default Node version (${node_version:-unknown}) via nvm"
     fi
 
+    # 10. Install Claude Code via the recommended native installer (not Homebrew),
+    #     so it self-updates and doesn't depend on Node/npm.
+    if command_exists claude; then
+        print_success "Claude Code is already installed"
+    else
+        print_info "Installing Claude Code (native installer)..."
+        if curl -fsSL https://claude.ai/install.sh | bash; then
+            print_success "Claude Code installed"
+        else
+            print_warning "Failed to install Claude Code"
+        fi
+    fi
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 
