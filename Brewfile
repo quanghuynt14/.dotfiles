@@ -14,4 +14,5 @@ brew "zoxide"
 if OS.mac?
   cask "ghostty"
   cask "raycast"
+  cask "slack"
 end
