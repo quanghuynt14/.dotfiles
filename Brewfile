@@ -15,4 +15,5 @@ if OS.mac?
   cask "ghostty"
   cask "raycast"
   cask "slack"
+  cask "visual-studio-code"
 end
