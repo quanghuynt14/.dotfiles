@@ -13,4 +13,5 @@ brew "zoxide"
 # GUI apps (macOS only)
 if OS.mac?
   cask "ghostty"
+  cask "raycast"
 end
