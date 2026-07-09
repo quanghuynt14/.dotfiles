@@ -262,9 +262,12 @@ cmd_init() {
     '
     print_success "Fisher & Fish plugins updated"
 
-    # 7. Clean up universal variables that conflict with conf.d settings
-    fish -c 'set --erase --universal nvm_default_version 2>/dev/null'
-    fish -c 'set --erase --universal PATH 2>/dev/null'
+    # 7. Clean up universal variables that conflict with conf.d settings.
+    #    'set --erase' returns non-zero when the variable doesn't exist; without
+    #    the '|| true' guard that would abort the whole script under 'set -e'
+    #    before the remaining init steps (Node, Claude Code) ever run.
+    fish -c 'set --erase --universal nvm_default_version' 2>/dev/null || true
+    fish -c 'set --erase --universal PATH' 2>/dev/null || true
     print_success "Cleaned up universal Fish variables"
 
     # 8. Remove stale system-level Node binaries (e.g. from old pkg installers)
