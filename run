@@ -277,7 +277,9 @@ cmd_init() {
 
     # 9. Install the default Node version so nvm.fish's startup guard doesn't
     #    error with "version must be installed first" on the next shell launch.
-    print_info "Installing default Node version via nvm..."
+    local node_version
+    node_version="$(fish -c 'echo -n $nvm_default_version' 2>/dev/null)"
+    print_info "Installing default Node version (${node_version:-unknown}) via nvm..."
     if fish -c '
         if not functions -q nvm
             exit 1
@@ -285,9 +287,9 @@ cmd_init() {
         test -n "$nvm_default_version"; or exit 1
         nvm install $nvm_default_version
     '; then
-        print_success "Default Node version installed"
+        print_success "Default Node version (${node_version:-unknown}) installed"
     else
-        print_warning "Could not install default Node version via nvm"
+        print_warning "Could not install default Node version (${node_version:-unknown}) via nvm"
     fi
 
     print_header "Done! Open a new terminal to see your new prompt."
