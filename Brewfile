@@ -17,4 +17,5 @@ if OS.mac?
   cask "slack"
   cask "visual-studio-code"
   cask "figma"
+  cask "stats"
 end
