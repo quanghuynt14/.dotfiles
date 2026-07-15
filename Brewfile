@@ -18,4 +18,5 @@ if OS.mac?
   cask "visual-studio-code"
   cask "figma"
   cask "stats"
+  cask "mongodb-compass"
 end
