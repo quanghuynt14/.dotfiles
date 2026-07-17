@@ -308,6 +308,25 @@ cmd_init() {
         fi
     fi
 
+    # 11. Install Socket CLI. It has no Homebrew package, so install the npm
+    #     global through the nvm-managed npm (activate the default Node first so
+    #     it lands on that version). Idempotent via 'type -q socket'.
+    print_info "Installing Socket CLI via npm..."
+    if fish -c '
+        if not functions -q nvm
+            exit 1
+        end
+        nvm use $nvm_default_version >/dev/null 2>&1
+        if type -q socket
+            exit 0
+        end
+        npm install -g socket
+    '; then
+        print_success "Socket CLI installed"
+    else
+        print_warning "Could not install Socket CLI via npm"
+    fi
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 
