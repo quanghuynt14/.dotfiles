@@ -19,4 +19,5 @@ if OS.mac?
   cask "figma"
   cask "stats"
   cask "mongodb-compass"
+  cask "tailscale-app"
 end
