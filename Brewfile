@@ -20,4 +20,5 @@ if OS.mac?
   cask "stats"
   cask "mongodb-compass"
   cask "tailscale-app"
+  cask "termius"
 end
