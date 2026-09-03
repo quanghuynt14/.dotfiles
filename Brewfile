@@ -10,6 +10,7 @@ brew "gh"
 brew "tmux"
 brew "tree"
 brew "zoxide"
+brew "herdr"
 
 # GUI apps (macOS only)
 if OS.mac?
