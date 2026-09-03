@@ -308,6 +308,30 @@ cmd_init() {
         fi
     fi
 
+    # 11. Herdr agent integration and skill. Both files are owned and versioned
+    #      upstream (herdr ships the hook, the skills CLI fetches the skill from
+    #      GitHub), so install them here rather than vendoring copies that would
+    #      silently go stale. Both commands are idempotent.
+    if command_exists herdr; then
+        print_info "Installing Herdr's Claude Code integration..."
+        if herdr integration install claude >/dev/null; then
+            print_success "Herdr Claude Code integration installed"
+        else
+            print_warning "Failed to install Herdr's Claude Code integration"
+        fi
+
+        # nvm.fish owns the Node version, so run the skills CLI through fish to
+        # get the same npx an interactive shell would use.
+        print_info "Installing the Herdr agent skill..."
+        if fish -c 'npx --yes skills add herdrdev/herdr --skill herdr -g' >/dev/null 2>&1; then
+            print_success "Herdr agent skill installed"
+        else
+            print_warning "Failed to install the Herdr agent skill"
+        fi
+    else
+        print_warning "herdr not found; skipped its integration and skill"
+    fi
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 

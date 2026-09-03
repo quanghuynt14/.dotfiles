@@ -1,2 +1,7 @@
 .DS_Store
 backups/
+
+# Herdr runtime state. ~/.config is stowed, so herdr writes its logs, sockets
+# and live session state straight into this repo. Track only the config.
+home/.config/herdr/*
+!home/.config/herdr/config.toml
