@@ -321,12 +321,30 @@ cmd_init() {
         fi
 
         # nvm.fish owns the Node version, so run the skills CLI through fish to
-        # get the same npx an interactive shell would use.
+        # get the same npx an interactive shell would use. '-y' is the skills
+        # CLI's own flag; without it the CLI waits on a confirmation prompt and
+        # hangs when stdout is not a TTY ('npx --yes' only covers npx itself).
+        # Keep the output so a failure says why instead of just warning.
         print_info "Installing the Herdr agent skill..."
-        if fish -c 'npx --yes skills add herdrdev/herdr --skill herdr -g' >/dev/null 2>&1; then
+        local skill_log
+        skill_log="$(mktemp -t herdr-skill)"
+        if fish -c 'npx --yes skills add herdrdev/herdr --skill herdr -g -y' \
+            >"$skill_log" 2>&1; then
             print_success "Herdr agent skill installed"
+            rm -f "$skill_log"
         else
-            print_warning "Failed to install the Herdr agent skill"
+            print_warning "Failed to install the Herdr agent skill:"
+            # The CLI draws spinners, so strip escape codes and keep the tail,
+            # where the actual error lands. '|| true' because pipefail would
+            # otherwise abort init when grep filters everything out.
+            {
+                if command_exists perl; then
+                    perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\r/\n/g' "$skill_log"
+                else
+                    cat "$skill_log"
+                fi
+            } | grep -v '^[[:space:]]*$' | tail -15 | sed 's/^/    /' >&2 || true
+            print_info "Retry manually: npx skills add herdrdev/herdr --skill herdr -g -y"
         fi
     else
         print_warning "herdr not found; skipped its integration and skill"
