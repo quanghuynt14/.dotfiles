@@ -2,3 +2,4 @@ shell-integration = fish
 
 theme = Catppuccin Frappe
 
+font-size = 15
