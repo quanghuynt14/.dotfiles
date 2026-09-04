@@ -326,8 +326,10 @@ cmd_init() {
         # hangs when stdout is not a TTY ('npx --yes' only covers npx itself).
         # Keep the output so a failure says why instead of just warning.
         print_info "Installing the Herdr agent skill..."
+        # GNU mktemp's '-t' takes a template and rejects one without X's, while
+        # BSD's takes a bare prefix, so pass an explicit path that suits both.
         local skill_log
-        skill_log="$(mktemp -t herdr-skill)"
+        skill_log="$(mktemp "${TMPDIR:-/tmp}/herdr-skill.XXXXXX")"
         if fish -c 'npx --yes skills add herdrdev/herdr --skill herdr -g -y' \
             >"$skill_log" 2>&1; then
             print_success "Herdr agent skill installed"
