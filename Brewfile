@@ -12,6 +12,16 @@ brew "tree"
 brew "zoxide"
 brew "herdr"
 
+# Container runtime (macOS only). No Docker Desktop: colima runs the daemon in
+# a Lima VM and "docker" here is the CLI only. Testcontainers needs it. Colima
+# does build on Linux, but the engine is native there — install it from the
+# distro rather than nesting a VM.
+if OS.mac?
+  brew "colima"
+  brew "docker"
+  brew "docker-compose"
+end
+
 # GUI apps (macOS only)
 if OS.mac?
   cask "ghostty"

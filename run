@@ -198,6 +198,37 @@ update_global_skills() {
     fi
 }
 
+# Start Colima if it isn't already running. Colima hosts the Docker daemon on
+# this machine (no Docker Desktop), and the Testcontainers-based integration
+# tests need it. Resource flags only apply on the first start: after that they
+# live in ~/.colima/default/colima.yaml and changing them needs a restart.
+ensure_colima_running() {
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        return 0
+    fi
+
+    if ! command_exists colima; then
+        print_warning "colima not found; skipped starting the container runtime"
+        return 0
+    fi
+
+    if colima status >/dev/null 2>&1; then
+        print_success "Colima is already running"
+        return 0
+    fi
+
+    print_info "Starting Colima (first start builds the VM, takes a minute)..."
+    # vz + virtiofs are the native macOS 13+ backends: faster than the QEMU
+    # default, and virtiofs is what makes bind mounts usable.
+    if colima start --cpu 4 --memory 8 --disk 60 --vm-type=vz --mount-type=virtiofs; then
+        print_success "Colima started"
+    else
+        print_warning "Failed to start Colima"
+        print_info "Retry manually: colima start"
+        return 0
+    fi
+}
+
 # Backup conflicting files then stow
 
 stow_dotfiles() {
@@ -382,6 +413,9 @@ cmd_init() {
         print_warning "herdr not found; skipped its integration and skill"
     fi
 
+    # 12. Container runtime for Docker-based tooling (Testcontainers, compose).
+    ensure_colima_running
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 
@@ -468,6 +502,26 @@ cmd_doctor() {
         ((++issues))
     fi
 
+    # Container runtime. On macOS the daemon lives in Colima; elsewhere it is
+    # native, so only its reachability is worth checking.
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if ! command_exists colima; then
+            print_warning "Colima not installed; Testcontainers tests will fail"
+        elif colima status >/dev/null 2>&1; then
+            print_success "Colima running"
+        else
+            print_warning "Colima installed but not running (run: colima start)"
+        fi
+    fi
+
+    if ! command_exists docker; then
+        print_warning "No docker CLI; Testcontainers tests will fail"
+    elif docker info >/dev/null 2>&1; then
+        print_success "Docker daemon reachable"
+    else
+        print_warning "Docker CLI cannot reach a daemon (check DOCKER_HOST)"
+    fi
+
     # Starship
     if command_exists starship; then
         print_success "Starship prompt installed"
@@ -497,6 +551,7 @@ cmd_doctor() {
         ".config/ghostty/config"
         ".config/git/config"
         ".config/starship.toml"
+        ".config/fish/conf.d/docker.fish"
     )
 
     local broken=0
