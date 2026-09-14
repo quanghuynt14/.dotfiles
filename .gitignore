@@ -1,7 +1,36 @@
 .DS_Store
 backups/
 
-# Herdr runtime state. ~/.config is stowed, so herdr writes its logs, sockets
-# and live session state straight into this repo. Track only the config.
-home/.config/herdr/*
+# ~/.config is stowed as a folded directory — it is a symlink into this repo,
+# so every tool that writes under ~/.config writes *here*. The default is
+# therefore "ignore", and tracked files are listed one by one below. A new
+# tool's logs, caches, sockets and credentials stay invisible to git until
+# someone adds a line for them on purpose.
+#
+# To track a new config file: add a "!" line for it. Nothing else works, and
+# that is the point.
+home/**
+# Directories stay traversable so the rules below can match inside them. Git
+# tracks no directory on its own, so this un-ignores nothing by itself.
+!home/**/
+
+# Fish. Files dropped in conf.d/ by fisher plugins (git.fish, nvm.fish) and
+# the generated completions/ and functions/ are absent on purpose:
+# fish_plugins pins the plugins and `fisher update` regenerates them.
+!home/.config/fish/config.fish
+!home/.config/fish/fish_plugins
+!home/.config/fish/conf.d/_nvm_defaults.fish
+!home/.config/fish/conf.d/aliases.fish
+!home/.config/fish/conf.d/brew.fish
+!home/.config/fish/conf.d/bun.fish
+!home/.config/fish/conf.d/docker.fish
+!home/.config/fish/conf.d/starship.fish
+!home/.config/fish/conf.d/zoxide.fish
+
+# Herdr writes its logs, sockets and live session state next to its config.
 !home/.config/herdr/config.toml
+
+!home/.config/ghostty/config
+!home/.config/git/config
+!home/.config/git/ignore
+!home/.config/starship.toml
