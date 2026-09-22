@@ -42,6 +42,19 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# The account's login shell: what chsh writes and what a new terminal starts.
+# $SHELL only names the shell that launched this process, so a run from an
+# editor, a cron job or an agent reports that parent instead.
+login_shell() {
+    local user
+    user="$(id -un)"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        dscl . -read "/Users/$user" UserShell 2>/dev/null | awk '{print $2}'
+    else
+        getent passwd "$user" 2>/dev/null | cut -d: -f7
+    fi
+}
+
 setup_ssh_key() {
     if [[ -f "$SSH_KEY_PATH" && -f "${SSH_KEY_PATH}.pub" ]]; then
         print_success "SSH key already exists at $SSH_KEY_PATH"
@@ -320,7 +333,7 @@ cmd_init() {
         echo "$fish_path" | sudo tee -a /etc/shells >/dev/null
     fi
 
-    if [[ "$SHELL" != "$fish_path" ]]; then
+    if [[ "$(login_shell)" != "$fish_path" ]]; then
         print_info "Setting Fish as default shell..."
         if chsh -s "$fish_path"; then
             print_success "Default shell changed to Fish"
@@ -492,10 +505,12 @@ cmd_doctor() {
     # Fish
     if command_exists fish; then
         print_success "Fish shell installed"
-        if [[ "$SHELL" == "$(command -v fish)" ]]; then
+        local current_shell
+        current_shell="$(login_shell)"
+        if [[ "$current_shell" == "$(command -v fish)" ]]; then
             print_success "Fish is default shell"
         else
-            print_warning "Fish is not default shell (current: $SHELL)"
+            print_warning "Fish is not default shell (current: ${current_shell:-unknown})"
         fi
     else
         print_error "Fish shell not installed"
