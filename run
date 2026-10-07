@@ -215,6 +215,83 @@ update_global_skills() {
     fi
 }
 
+# Print the path to Claude Code, or fail if it isn't installed. Right after the
+# native installer runs, this shell's PATH predates ~/.local/bin.
+find_claude() {
+    if command_exists claude; then
+        echo "claude"
+    elif [[ -x "${HOME}/.local/bin/claude" ]]; then
+        echo "${HOME}/.local/bin/claude"
+    else
+        return 1
+    fi
+}
+
+# Personal agent skills: a private repo published as a Claude Code plugin
+# marketplace, one plugin per category.
+readonly SKILLS_MARKETPLACE="huy-skills"
+readonly SKILLS_REPO_URL="git@github.com:quanghuynt14/skills.git"
+readonly SKILLS_PLUGINS=(oss matt addy security personal)
+
+install_skill_plugins() {
+    local claude_bin
+    if ! claude_bin="$(find_claude)"; then
+        print_warning "Claude Code not found; skipped the ${SKILLS_MARKETPLACE} plugins"
+        return 0
+    fi
+
+    # Only add the marketplace when it's missing. A machine where the skills
+    # are edited points it at the local clone instead, and re-adding it from
+    # GitHub would hide uncommitted work there. The SSH URL, not the owner/repo
+    # shorthand, because the repo is private and the SSH key is what every
+    # machine here authenticates to GitHub with.
+    if ! "$claude_bin" plugin marketplace list --json 2>/dev/null \
+        | grep -q "\"name\": \"${SKILLS_MARKETPLACE}\""; then
+        print_info "Adding the ${SKILLS_MARKETPLACE} marketplace..."
+        if ! "$claude_bin" plugin marketplace add "$SKILLS_REPO_URL" >/dev/null 2>&1; then
+            print_warning "Failed to add the ${SKILLS_MARKETPLACE} marketplace"
+            print_info "Retry manually: claude plugin marketplace add ${SKILLS_REPO_URL}"
+            return 0
+        fi
+    fi
+
+    local plugin failed=0
+    for plugin in "${SKILLS_PLUGINS[@]}"; do
+        if ! "$claude_bin" plugin install -s user "${plugin}@${SKILLS_MARKETPLACE}" >/dev/null 2>&1; then
+            print_warning "Failed to install ${plugin}@${SKILLS_MARKETPLACE}"
+            failed=1
+        fi
+    done
+    if [[ $failed -eq 0 ]]; then
+        print_success "${SKILLS_MARKETPLACE} plugins installed"
+    fi
+}
+
+update_skill_plugins() {
+    local claude_bin
+    if ! claude_bin="$(find_claude)"; then
+        return 0
+    fi
+
+    print_info "Updating the ${SKILLS_MARKETPLACE} plugins..."
+    if ! "$claude_bin" plugin marketplace update "$SKILLS_MARKETPLACE" >/dev/null 2>&1; then
+        print_warning "Failed to update the ${SKILLS_MARKETPLACE} marketplace"
+        return 0
+    fi
+
+    local plugin failed=0
+    for plugin in "${SKILLS_PLUGINS[@]}"; do
+        if ! "$claude_bin" plugin update -s user "${plugin}@${SKILLS_MARKETPLACE}" >/dev/null 2>&1; then
+            print_warning "Failed to update ${plugin}@${SKILLS_MARKETPLACE}"
+            failed=1
+        fi
+    done
+    if [[ $failed -eq 0 ]]; then
+        # Claude Code loads plugins at startup.
+        print_success "${SKILLS_MARKETPLACE} plugins updated (restart Claude Code to load changes)"
+    fi
+}
+
 # Start Colima if it isn't already running. Colima hosts the Docker daemon on
 # this machine (no Docker Desktop), and the Testcontainers-based integration
 # tests need it. Resource flags only apply on the first start: after that they
@@ -355,13 +432,7 @@ install_chrome() {
 # being silently ignored because the name was already taken.
 setup_browser_mcp() {
     local claude_bin
-    if command_exists claude; then
-        claude_bin="claude"
-    elif [[ -x "${HOME}/.local/bin/claude" ]]; then
-        # Installed a step ago by the native installer; this shell's PATH
-        # predates it.
-        claude_bin="${HOME}/.local/bin/claude"
-    else
+    if ! claude_bin="$(find_claude)"; then
         print_warning "Claude Code not found; skipped the chrome-devtools MCP server"
         return 1
     fi
@@ -557,6 +628,9 @@ cmd_init() {
     #      browser is still a usable dev box — so keep going on failure.
     install_chrome && setup_browser_mcp || true
 
+    # 14. Personal agent skills, installed as Claude Code plugins.
+    install_skill_plugins
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 
@@ -579,6 +653,8 @@ cmd_update() {
     stow_dotfiles
 
     update_global_skills
+
+    update_skill_plugins
 }
 
 cmd_doctor() {
@@ -709,6 +785,20 @@ cmd_doctor() {
             print_warning "chrome-devtools MCP server not registered"
             print_info "  Run './run init' to register it"
         fi
+
+        # Personal skills: each plugin installed and enabled. The JSON prints
+        # "enabled" a few lines after "id", so match within that window.
+        local plugins_json plugin
+        plugins_json="$(claude plugin list --json 2>/dev/null || true)"
+        for plugin in "${SKILLS_PLUGINS[@]}"; do
+            if grep -A4 "\"id\": \"${plugin}@${SKILLS_MARKETPLACE}\"" <<<"$plugins_json" \
+                | grep -q '"enabled": true'; then
+                print_success "${plugin}@${SKILLS_MARKETPLACE} plugin enabled"
+            else
+                print_warning "${plugin}@${SKILLS_MARKETPLACE} plugin not installed or disabled"
+                print_info "  Run './run init' to install it"
+            fi
+        done
     fi
 
     # Key symlinks
@@ -765,9 +855,9 @@ cmd_help() {
     echo -e "${BOLD}Usage:${RESET} run <command>"
     echo ""
     echo -e "${BOLD}Commands:${RESET}"
-    echo "    init      Full setup: Homebrew, packages, stow, SSH key, Fish, browser testing"
+    echo "    init      Full setup: Homebrew, packages, stow, SSH key, Fish, browser testing, skills"
     echo "    stow      Backup conflicts and re-stow dotfiles"
-    echo "    update    Pull latest changes, re-stow, update global agent skills"
+    echo "    update    Pull latest changes, re-stow, update agent skills and plugins"
     echo "    doctor    Run diagnostics"
     echo "    help      Show this message"
 }
