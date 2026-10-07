@@ -281,6 +281,125 @@ stow_dotfiles() {
     fi
 }
 
+# Google Chrome, driven headlessly by the chrome-devtools MCP server so agents
+# can load a page and read its console, network and performance data.
+#
+# The Google .deb is deliberate over the Chrome that Playwright or Puppeteer
+# downloads. Those tarballs unpack a binary with no dependency resolution — on
+# a fresh Ubuntu server it fails to start on ~20 missing shared libraries
+# (libnspr4, libnss3, libgbm1, ...) that apt pulls in automatically here.
+# The .deb also lands the binary at /opt/google/chrome/chrome, the exact path
+# Ubuntu 24.04's stock /etc/apparmor.d/chrome profile grants 'userns' to; a
+# browser installed anywhere else is unconfined, and with the 24.04 default of
+# kernel.apparmor_restrict_unprivileged_userns=1 it cannot build its sandbox
+# and would have to run with --no-sandbox. Finally, the .deb registers Google's
+# apt repo on install, so Chrome updates with the rest of the system.
+install_chrome() {
+    # macOS gets Chrome from the Brewfile cask alongside the other GUI apps.
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        return 0
+    fi
+
+    if [[ -x /opt/google/chrome/chrome ]]; then
+        print_success "Google Chrome is already installed"
+        return 0
+    fi
+
+    if ! command_exists apt-get; then
+        print_warning "Not an apt-based system; install Google Chrome manually for browser testing"
+        return 1
+    fi
+
+    # Google publishes no Linux .deb for arm64.
+    if [[ "$(uname -m)" != "x86_64" ]]; then
+        print_warning "Google Chrome has no Linux build for $(uname -m); skipping browser testing setup"
+        return 1
+    fi
+
+    print_info "Installing Google Chrome (requires sudo)..."
+
+    # A temp directory rather than a temp file: apt-get needs the argument to
+    # look like a package path, and giving mktemp a '.deb' suffix is a GNU-only
+    # extension that BSD mktemp rejects.
+    local tmpdir deb
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/chrome-install.XXXXXX")"
+    deb="${tmpdir}/google-chrome-stable_current_amd64.deb"
+
+    # Dependencies come from the apt lists, which are usually stale on a fresh
+    # remote; without a refresh the install fails on unresolvable versions.
+    sudo apt-get update -qq || true
+
+    if curl -fsSL -o "$deb" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+        && sudo apt-get install -y "$deb"; then
+        print_success "Google Chrome installed"
+        rm -rf "$tmpdir"
+    else
+        print_warning "Failed to install Google Chrome"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+}
+
+# Register the chrome-devtools MCP server with Claude Code at user scope, so
+# every project on the box gets it. Skills that need a real browser
+# (agent-skills' browser-testing-with-devtools, cloudflare's web-perf) drive
+# this server and do nothing without it.
+#
+# The registration lives in ~/.claude.json — machine-local state this repo
+# doesn't stow — so the flags below are the source of truth: drop any existing
+# entry first, and editing them here lands on the next 'run init' instead of
+# being silently ignored because the name was already taken.
+setup_browser_mcp() {
+    local claude_bin
+    if command_exists claude; then
+        claude_bin="claude"
+    elif [[ -x "${HOME}/.local/bin/claude" ]]; then
+        # Installed a step ago by the native installer; this shell's PATH
+        # predates it.
+        claude_bin="${HOME}/.local/bin/claude"
+    else
+        print_warning "Claude Code not found; skipped the chrome-devtools MCP server"
+        return 1
+    fi
+
+    local -a server_args=(
+        -y chrome-devtools-mcp@latest
+        # Use the Chrome installed above rather than downloading a second one.
+        --channel stable
+        # A throwaway profile per session, so parallel agents don't contend for
+        # one profile's lock file. Drop it if an agent needs to stay signed in
+        # to an app between sessions.
+        --isolated
+    )
+    # These are SSH boxes with no display; only macOS has one to draw into.
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        server_args+=(--headless)
+    fi
+
+    # 'remove' exits non-zero when the server isn't registered yet, which is the
+    # normal first-run case, so don't let it abort init under 'set -e'.
+    "$claude_bin" mcp remove -s user chrome-devtools >/dev/null 2>&1 || true
+
+    if "$claude_bin" mcp add -s user chrome-devtools -- npx "${server_args[@]}" >/dev/null; then
+        print_success "chrome-devtools MCP server registered"
+    else
+        print_warning "Failed to register the chrome-devtools MCP server"
+        return 1
+    fi
+
+    # Warm npx's cache. Claude Code gives an MCP server a bounded startup
+    # window, and a cold 'npx -y' downloading the package inside that window can
+    # miss it — leaving the first browser request of a fresh box failing for a
+    # reason that looks nothing like a download. Run it through fish, because
+    # nvm.fish owns the Node version and bash here may have no npx at all.
+    print_info "Warming the chrome-devtools MCP cache..."
+    if fish -c 'npx --yes chrome-devtools-mcp@latest --version' >/dev/null 2>&1; then
+        print_success "chrome-devtools MCP cache warmed"
+    else
+        print_warning "Could not pre-fetch chrome-devtools-mcp; it will download on first use"
+    fi
+}
+
 # Commands
 
 cmd_init() {
@@ -429,6 +548,11 @@ cmd_init() {
     # 12. Container runtime for Docker-based tooling (Testcontainers, compose).
     ensure_colima_running
 
+    # 13. Browser testing: a real Chrome plus the chrome-devtools MCP server
+    #      that agents drive it through. Neither step is fatal — a box without a
+    #      browser is still a usable dev box — so keep going on failure.
+    install_chrome && setup_browser_mcp || true
+
     print_header "Done! Open a new terminal to see your new prompt."
 }
 
@@ -560,6 +684,29 @@ cmd_doctor() {
         fi
     fi
 
+    # Browser testing (Chrome + the MCP server agents drive it through)
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if [[ -d "/Applications/Google Chrome.app" ]]; then
+            print_success "Google Chrome installed"
+        else
+            print_warning "Google Chrome not found in /Applications"
+        fi
+    elif [[ -x /opt/google/chrome/chrome ]]; then
+        print_success "Google Chrome installed"
+    else
+        print_warning "Google Chrome not installed (browser testing unavailable)"
+        print_info "  Run './run init' to install it"
+    fi
+
+    if command_exists claude; then
+        if claude mcp get chrome-devtools >/dev/null 2>&1; then
+            print_success "chrome-devtools MCP server registered"
+        else
+            print_warning "chrome-devtools MCP server not registered"
+            print_info "  Run './run init' to register it"
+        fi
+    fi
+
     # Key symlinks
     local expected_links=(
         ".config/fish/config.fish"
@@ -614,7 +761,7 @@ cmd_help() {
     echo -e "${BOLD}Usage:${RESET} run <command>"
     echo ""
     echo -e "${BOLD}Commands:${RESET}"
-    echo "    init      Full setup: Homebrew, packages, stow, SSH key, Fish shell"
+    echo "    init      Full setup: Homebrew, packages, stow, SSH key, Fish, browser testing"
     echo "    stow      Backup conflicts and re-stow dotfiles"
     echo "    update    Pull latest changes, re-stow, update global agent skills"
     echo "    doctor    Run diagnostics"

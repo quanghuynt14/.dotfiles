@@ -50,6 +50,7 @@ end
 # GUI apps (macOS only)
 if OS.mac?
   cask "ghostty"
+  cask "google-chrome"
   cask "raycast"
   cask "slack"
   cask "visual-studio-code"
