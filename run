@@ -15,6 +15,10 @@ DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly DOTFILES_DIR
 readonly GIT_EMAIL="quanghuynt14@gmail.com"
 readonly SSH_KEY_PATH="${HOME}/.ssh/id_ed25519"
+# Prefix for 'fish -c' commands that need node or npx. nvm.fish only activates
+# the default version in interactive shells, so 'fish -c' starts with no Node
+# on PATH. macOS hides this behind Homebrew's node; Linux has nothing else.
+readonly NVM_ACTIVATE='nvm use --silent $nvm_default_version'
 
 # Helpers
 
@@ -174,7 +178,7 @@ run_skills_cli() {
     local log
     log="$(mktemp "${TMPDIR:-/tmp}/skills-cli.XXXXXX")"
 
-    if fish -c "npx --yes skills $*" >"$log" 2>&1 </dev/null; then
+    if fish -c "$NVM_ACTIVATE; and npx --yes skills $*" >"$log" 2>&1 </dev/null; then
         rm -f "$log"
         return 0
     fi
@@ -393,7 +397,7 @@ setup_browser_mcp() {
     # reason that looks nothing like a download. Run it through fish, because
     # nvm.fish owns the Node version and bash here may have no npx at all.
     print_info "Warming the chrome-devtools MCP cache..."
-    if fish -c 'npx --yes chrome-devtools-mcp@latest --version' >/dev/null 2>&1; then
+    if fish -c "$NVM_ACTIVATE; and npx --yes chrome-devtools-mcp@latest --version" >/dev/null 2>&1; then
         print_success "chrome-devtools MCP cache warmed"
     else
         print_warning "Could not pre-fetch chrome-devtools-mcp; it will download on first use"
