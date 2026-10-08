@@ -164,57 +164,6 @@ ensure_brew_on_path() {
     return 1
 }
 
-# Run the skills CLI through fish, so it uses the same npx (and nvm-managed
-# Node) an interactive shell would. '-y' is the skills CLI's own flag; without
-# it the CLI waits on a confirmation prompt and hangs when stdout is not a TTY
-# ('npx --yes' only covers npx itself). $1 is the headline printed above the
-# captured output on failure, so a failure says why instead of just warning.
-run_skills_cli() {
-    local headline="$1"
-    shift
-
-    # GNU mktemp's '-t' takes a template and rejects one without X's, while
-    # BSD's takes a bare prefix, so pass an explicit path that suits both.
-    local log
-    log="$(mktemp "${TMPDIR:-/tmp}/skills-cli.XXXXXX")"
-
-    if fish -c "$NVM_ACTIVATE; and npx --yes skills $*" >"$log" 2>&1 </dev/null; then
-        rm -f "$log"
-        return 0
-    fi
-
-    print_warning "$headline"
-    # The CLI draws spinners, so strip escape codes and keep the tail, where
-    # the actual error lands. '|| true' because pipefail would otherwise abort
-    # the caller when grep filters everything out.
-    {
-        if command_exists perl; then
-            perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\r/\n/g' "$log"
-        else
-            cat "$log"
-        fi
-    } | grep -v '^[[:space:]]*$' | tail -15 | sed 's/^/    /' >&2 || true
-    rm -f "$log"
-    return 1
-}
-
-# Global agent skills are installed by the skills CLI (see cmd_init) and
-# versioned under ~/.agents/skills; nothing in this repo pins them, so refresh
-# them all here rather than updating each one by hand.
-update_global_skills() {
-    if ! command_exists fish; then
-        print_warning "fish not found; skipped updating global agent skills"
-        return 0
-    fi
-
-    print_info "Updating global agent skills..."
-    if run_skills_cli "Failed to update global agent skills:" update -g -y; then
-        print_success "Global agent skills updated"
-    else
-        print_info "Retry manually: npx skills update -g -y"
-    fi
-}
-
 # Print the path to Claude Code, or fail if it isn't installed. Right after the
 # native installer runs, this shell's PATH predates ~/.local/bin.
 find_claude() {
@@ -597,10 +546,10 @@ cmd_init() {
         fi
     fi
 
-    # 11. Herdr agent integration and skill. Both files are owned and versioned
-    #      upstream (herdr ships the hook, the skills CLI fetches the skill from
-    #      GitHub), so install them here rather than vendoring copies that would
-    #      silently go stale. Both commands are idempotent.
+    # 11. Herdr's Claude Code integration. herdr owns and versions the hook, so
+    #      install it here rather than vendoring a copy that would silently go
+    #      stale. The command is idempotent. (Its agent skill ships in the
+    #      personal plugin, step 14.)
     if command_exists herdr; then
         print_info "Installing Herdr's Claude Code integration..."
         if herdr integration install claude >/dev/null; then
@@ -608,16 +557,8 @@ cmd_init() {
         else
             print_warning "Failed to install Herdr's Claude Code integration"
         fi
-
-        print_info "Installing the Herdr agent skill..."
-        if run_skills_cli "Failed to install the Herdr agent skill:" \
-            add herdrdev/herdr --skill herdr -g -y; then
-            print_success "Herdr agent skill installed"
-        else
-            print_info "Retry manually: npx skills add herdrdev/herdr --skill herdr -g -y"
-        fi
     else
-        print_warning "herdr not found; skipped its integration and skill"
+        print_warning "herdr not found; skipped its Claude Code integration"
     fi
 
     # 12. Container runtime for Docker-based tooling (Testcontainers, compose).
@@ -651,8 +592,6 @@ cmd_update() {
     fi
 
     stow_dotfiles
-
-    update_global_skills
 
     update_skill_plugins
 }
@@ -857,7 +796,7 @@ cmd_help() {
     echo -e "${BOLD}Commands:${RESET}"
     echo "    init      Full setup: Homebrew, packages, stow, SSH key, Fish, browser testing, skills"
     echo "    stow      Backup conflicts and re-stow dotfiles"
-    echo "    update    Pull latest changes, re-stow, update agent skills and plugins"
+    echo "    update    Pull latest changes, re-stow, update skill plugins"
     echo "    doctor    Run diagnostics"
     echo "    help      Show this message"
 }

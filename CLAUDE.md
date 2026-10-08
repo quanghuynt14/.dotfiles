@@ -28,13 +28,16 @@ fail must warn and `return 0` rather than abort the rest of `init`. Use the
 `command_exists`, never bare `echo`.
 
 **Comments explain why.** The existing ones document reasons a reader cannot
-recover from the code: why GNU `stat` is tried before BSD, why the skills CLI
-needs its own `-y`, why resource flags only matter on Colima's first start.
+recover from the code: why GNU `stat` is tried before BSD, why `fish -c` must
+activate nvm before calling `npx`, why resource flags only matter on Colima's
+first start.
 Match that density. Skip comments that restate the line.
 
 **Don't vendor upstream-owned files.** The herdr hook and the agent skills are
 versioned elsewhere; `run init` installs them with idempotent commands instead
-of keeping copies that go stale.
+of keeping copies that go stale. Skills come only from the `huy-skills` Claude
+Code plugin marketplace (`quanghuynt14/skills`); nothing installs into
+`~/.claude/skills` or `~/.agents/skills`.
 
 **Fish config.** One file per tool in `conf.d`, named after it. `config.fish`
 stays minimal. Plugins live in `fish_plugins`, managed by fisher.
