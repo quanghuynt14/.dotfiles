@@ -4,3 +4,8 @@ agent_panel_sort = "spaces"
 
 [ui.toast]
 delivery = "system"
+
+[keys]
+# Prefix key used to enter prefix mode.
+# Default: "ctrl+b".
+prefix = "ctrl+semicolon"
