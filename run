@@ -303,6 +303,11 @@ stow_dotfiles() {
         print_info "Backed up conflicting files to ${backup_dir}"
     fi
 
+    # Stow folds any directory missing from $HOME into one symlink back to this
+    # repo. ~/.claude must stay real: Claude Code keeps sessions, credentials
+    # and its plugin cache there, and only CLAUDE.md belongs in the repo.
+    mkdir -p "${HOME}/.claude"
+
     if stow -R -d "${DOTFILES_DIR}" -t "${HOME}" home; then
         print_success "Dotfiles stowed successfully"
     else
@@ -747,6 +752,7 @@ cmd_doctor() {
         ".config/git/config"
         ".config/starship.toml"
         ".config/fish/conf.d/docker.fish"
+        ".claude/CLAUDE.md"
     )
 
     local broken=0

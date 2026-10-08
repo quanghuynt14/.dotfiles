@@ -60,6 +60,10 @@ add its `!` line to `.gitignore`. There is no other way to track it, by design.
 Files owned by someone else — fisher plugin output, an installer's commands,
 runtime state — get no line at all.
 
+`~/.claude` is the exception to folding. `run stow` creates it first, so stow
+links `CLAUDE.md` alone: Claude Code keeps sessions, credentials and its plugin
+cache in that directory, and none of it belongs here.
+
 ## Checks before committing
 
 ```sh

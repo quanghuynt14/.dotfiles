@@ -34,3 +34,7 @@ home/**
 !home/.config/git/config
 !home/.config/git/ignore
 !home/.config/starship.toml
+
+# Claude Code's global instructions. Unlike ~/.config, ~/.claude is never
+# folded: run keeps it a real directory, so this file is the only link in it.
+!home/.claude/CLAUDE.md
