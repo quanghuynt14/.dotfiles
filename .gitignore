@@ -23,6 +23,7 @@ home/**
 !home/.config/fish/conf.d/aliases.fish
 !home/.config/fish/conf.d/brew.fish
 !home/.config/fish/conf.d/bun.fish
+!home/.config/fish/conf.d/cloudflare.fish
 !home/.config/fish/conf.d/docker.fish
 !home/.config/fish/conf.d/starship.fish
 !home/.config/fish/conf.d/zoxide.fish
